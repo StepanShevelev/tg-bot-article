@@ -2,62 +2,83 @@ package main
 
 import (
 	mydb "github.com/StepanShevelev/tg-bot-article/db"
-	cfg "github.com/StepanShevelev/tg-bot-article/pkg/config"
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 	"github.com/sirupsen/logrus"
 )
 
-var numericKeyboard = tgbotapi.NewInlineKeyboardMarkup(
-	tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData("get an article", "CALLBACKDATA"),
+//var numericKeyboard = tgbotapi.NewInlineKeyboardMarkup(
+//	tgbotapi.NewInlineKeyboardRow(
+//		tgbotapi.NewInlineKeyboardButtonData("Показать статьи", showArticles()),
+//	))
+
+var numericKeyboard = tgbotapi.NewReplyKeyboard(
+	tgbotapi.NewKeyboardButtonRow(
+		tgbotapi.NewKeyboardButton("Показать статьи"),
 	),
 )
 
+func showArticles() string {
+
+	postMap, err := mydb.GetPosts()
+	if err != nil {
+		mydb.UppendErrorWithPath(err)
+		logrus.Info("Could not find post", err)
+		return ""
+	}
+	msg := "Доступные статьи:"
+	for i, _ := range postMap {
+		msg = msg + "\n"
+		msg += postMap[i] + "\n"
+	}
+
+	return msg
+}
+
 func main() {
+
+	//post, err := mydb.GetPostByTitle()
 
 	mydb.ConnectToDb()
 
-	config := cfg.New()
-	if err := config.Load("./configs", "config", "yml"); err != nil {
-		mydb.UppendErrorWithPath(err)
-		logrus.Fatal(err)
-	}
-
-	bot, err := tgbotapi.NewBotAPI(config.TelegramBotToken)
+	bot, err := tgbotapi.NewBotAPI("5085408878:AAGMbrpXnjoJtZRYVYkKCvxeWYLfTztofHI")
 	if err != nil {
-		mydb.UppendErrorWithPath(err)
-		logrus.Fatal(err)
+		logrus.Info(err)
 	}
 
-	//bot.Debug = true
-	logrus.WithFields(logrus.Fields{
-		"BotUserName": bot.Self.UserName,
-	}).Info("Authorized in account")
+	bot.Debug = true
+	bot.RemoveWebhook()
+	logrus.Printf("Authorized on account %s", bot.Self.UserName)
 
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
 
-	updates := bot.GetUpdatesChan(u)
+	updates, _ := bot.GetUpdatesChan(u)
 
 	for update := range updates {
-		if update.CallbackQuery.Data == "CALLBACKDATA" {
-			logrus.Info("Нажата клавиша, = get an article !")
-		}
-		if update.Message == nil { // ignore non-Message updates
-			continue
-		}
-		msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
-		switch update.Message.Text {
-		case "open":
-			msg.ReplyMarkup = numericKeyboard
-		case "close":
-			msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+		// Check if we've gotten a message update.
+		if update.Message != nil {
+
+			// Construct a new message from the given chat ID and containing
+			// the text that we received.
+			file := mydb.CreateHTML(update.Message.Text)
+			//msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
+			//msg.ReplyMarkup = numericKeyboard
+			msg := tgbotapi.NewDocumentUpload(update.Message.Chat.ID, file)
+			//switch update.Message.Text {
+			//case "Показать статьи":
+			//	msg.Text = showArticles()
+			//case "Обзор Vampire: The Masquerade — Swansong. Отцы и дети и вампиры":
+			//	bot.Send(doc)
+			//	return
+			//}
+
+			//Send the message.
+			if _, err = bot.Send(msg); err != nil {
+				//mydb.UppendErrorWithPath(err)
+				logrus.Fatal(err)
+			}
 		}
 
-		_, err := bot.Send(msg)
-		if err != nil {
-			mydb.UppendErrorWithPath(err)
-			logrus.Fatal(err)
-		}
 	}
+	//mydb.CreateHTML()
 }

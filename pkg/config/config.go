@@ -7,6 +7,7 @@ import (
 
 type Config struct {
 	TelegramBotToken string `mapstructure:"telegramBotToken"`
+	WebhookURL       string `mapstructure:"WebhookURL"`
 	Port             string `mapstructure:"port"`
 	DB               struct {
 		Username string `mapstructure:"username"`
