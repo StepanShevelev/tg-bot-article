@@ -93,18 +93,22 @@ func CreateHTML(title string, whoTookMe string) (string, error) {
 		return "", err
 	}
 
+	//  {{range .Images}}
+	//               <img src={{ .Name}}>
+	//           {{end}}
+
 	//An HTML template
 	const tmpl = `
 	<html>
 <head>
 <title>{{.Title}}</title>
-{{.Name}}
+{{range .Images}} <img src={{ .Name}}> {{break}} {{end}}
 </head>
 <body>
 {{.Text}}
-  {{range .Images}}
-                an image {{.Name}}
-            {{end}}
+{{range $key, $value := .Images}} 
+<img src={{ .Name}}>
+{{end}}
 </body>
 </html>
 `
