@@ -6,6 +6,7 @@ import (
 	"gorm.io/gorm"
 	"html/template"
 	"os"
+	"strconv"
 )
 
 type DbInstance struct {
@@ -98,25 +99,41 @@ func CreateHTML(title string, whoTookMe string) (string, error) {
 	//           {{end}}
 
 	//An HTML template
-	const tmpl = `
+	var tmpl = `
 	<html>
 <head>
 <title>{{.Title}}</title>
-{{range .Images}} <img src={{ .Name}}> {{break}} {{end}}
+
 </head>
 <body>
+
+<img src={{  (index  .Images 0).Name }} >
+
+
 {{.Text}}
-{{range $key, $value := .Images}} 
+
+{{range .Images}}
+{{if index 3}}{{break}}{{end}}
+{{continue}}
+
 <img src={{ .Name}}>
 {{end}}
 </body>
 </html>
 `
-
+	//{{if index  .Name 0}}{{break}}{{end}}
+	//{{continue}}
 	a := Post{
 		Title:  post.Title,
 		Text:   post.Text,
 		Images: images,
+	}
+
+	for i, _ := range images {
+		if i == 0 {
+			continue
+		}
+		tmpl = tmpl + "<html> <img src={{  (index $.Images" + " " + strconv.Itoa(i) + ").Name }} > </html>"
 	}
 
 	// Make and parse the HTML template
