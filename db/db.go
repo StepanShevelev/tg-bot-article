@@ -5,7 +5,6 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"html/template"
-	"log"
 	"os"
 )
 
@@ -23,6 +22,10 @@ func ConnectToDb() {
 		UppendErrorWithPath(err)
 		logrus.Fatal("Failed to connect to the database! \n", err)
 	}
+
+	db.AutoMigrate(&Post{})
+	db.AutoMigrate(&Image{})
+	db.AutoMigrate(&ErrLogs{})
 
 	Database = DbInstance{
 		Db: db,
@@ -51,7 +54,7 @@ func GetPostByTitle(title string) (*Post, error) {
 
 	var post *Post
 
-	result := Database.Db.Find(&post, "title = ?", title)
+	result := Database.Db.Preload("Images").Find(&post, "title = ?", title)
 	if result.Error != nil {
 		UppendErrorWithPath(result.Error)
 		logrus.Info("Could not find post", result.Error)
@@ -60,46 +63,94 @@ func GetPostByTitle(title string) (*Post, error) {
 	return post, nil
 }
 
-//*tgbotapi.Document
-//title string
+func GetImagesByPost(postId uint) ([]Image, error) {
 
-func CreateHTML(title string) *os.File {
-	//var docDoc *tgbotapi.Document
+	var images []Image
+
+	result := Database.Db.Find(&images, "post_id = ?", postId)
+	if result.Error != nil {
+		UppendErrorWithPath(result.Error)
+		logrus.Info("Could not find post", result.Error)
+		return nil, result.Error
+	}
+	return images, nil
+
+}
+
+func CreateHTML(title string, whoTookMe string) (string, error) {
 
 	post, err := GetPostByTitle(title)
 	if err != nil {
 		UppendErrorWithPath(err)
 		logrus.Info("Could not find post to create HTML", err)
+		return "", err
+	}
+
+	images, err := GetImagesByPost(post.ID)
+	if err != nil {
+		UppendErrorWithPath(err)
+		logrus.Info("Could not find post to create HTML", err)
+		return "", err
 	}
 
 	//An HTML template
 	const tmpl = `
-
-<html>
+	<html>
 <head>
 <title>{{.Title}}</title>
+{{.Name}}
 </head>
 <body>
 {{.Text}}
+  {{range .Images}}
+                an image {{.Name}}
+            {{end}}
 </body>
 </html>
 `
 
+	a := Post{
+		Title:  post.Title,
+		Text:   post.Text,
+		Images: images,
+	}
+
 	// Make and parse the HTML template
 	t, err := template.New(post.Title).Parse(tmpl)
 	if err != nil {
-		log.Fatal(err)
+		logrus.Info("Error occurred while creating new template", err)
+		UppendErrorWithPath(err)
+		return "", err
 	}
 
 	file, err := os.Create(post.Title + ".html")
 	if err != nil {
-		log.Panic(err)
+		logrus.Info("Error occurred while creating file", err)
+		UppendErrorWithPath(err)
+		return "", err
 	}
-	t.ExecuteTemplate(file, post.Title, post)
 
-	//defer os.Remove(file.Name())
-	// Render the data and output using standard output
-	//t.Execute(os.Stdout, post)
+	err = t.ExecuteTemplate(file, post.Title, a)
+	if err != nil {
+		logrus.Info("Error occurred while updating file data", err)
+		UppendErrorWithPath(err)
+		return "", err
+	}
 
-	return file
+	//err = t.ExecuteTemplate(file, post.Title, images)
+	//if err != nil {
+	//	logrus.Info("Error occurred while updating file data", err)
+	//	UppendErrorWithPath(err)
+	//	return "", err
+	//}
+
+	post.WhoTookMe = whoTookMe
+	result := Database.Db.Save(&post)
+	if result.Error != nil {
+		logrus.Info("Error occurred while updating post", err)
+		UppendErrorWithPath(result.Error)
+	}
+
+	path := "./" + post.Title + ".html"
+	return path, nil
 }

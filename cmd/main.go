@@ -36,17 +36,19 @@ func showArticles() string {
 
 func main() {
 
-	//post, err := mydb.GetPostByTitle()
-
 	mydb.ConnectToDb()
 
-	bot, err := tgbotapi.NewBotAPI("5085408878:AAGMbrpXnjoJtZRYVYkKCvxeWYLfTztofHI")
+	bot, err := tgbotapi.NewBotAPI("")
 	if err != nil {
 		logrus.Info(err)
 	}
 
 	bot.Debug = true
-	bot.RemoveWebhook()
+	_, err = bot.RemoveWebhook()
+	if err != nil {
+		mydb.UppendErrorWithPath(err)
+		logrus.Info("Webhook error", err)
+	}
 	logrus.Printf("Authorized on account %s", bot.Self.UserName)
 
 	u := tgbotapi.NewUpdate(0)
@@ -55,30 +57,56 @@ func main() {
 	updates, _ := bot.GetUpdatesChan(u)
 
 	for update := range updates {
-		// Check if we've gotten a message update.
+
+		logrus.WithFields(logrus.Fields{
+			"UserName": update.Message.From.UserName,
+			"Text":     update.Message.Text,
+		}).Info("Message from User")
+
 		if update.Message != nil {
 
-			// Construct a new message from the given chat ID and containing
-			// the text that we received.
-			file := mydb.CreateHTML(update.Message.Text)
-			//msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
-			//msg.ReplyMarkup = numericKeyboard
-			msg := tgbotapi.NewDocumentUpload(update.Message.Chat.ID, file)
-			//switch update.Message.Text {
-			//case "Показать статьи":
-			//	msg.Text = showArticles()
-			//case "Обзор Vampire: The Masquerade — Swansong. Отцы и дети и вампиры":
-			//	bot.Send(doc)
-			//	return
-			//}
+			if update.Message.IsCommand() {
+				switch update.Message.Command() {
+				case "start":
+					msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
+					msg.ReplyMarkup = numericKeyboard
+					if _, err = bot.Send(msg); err != nil {
+						mydb.UppendErrorWithPath(err)
+						logrus.Info("Error occurred while sending message", err)
+					}
+				}
+			}
 
-			//Send the message.
-			if _, err = bot.Send(msg); err != nil {
-				//mydb.UppendErrorWithPath(err)
-				logrus.Fatal(err)
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
+			post, err := mydb.GetPostByTitle(msg.Text)
+			if err != nil {
+				mydb.UppendErrorWithPath(err)
+				logrus.Info("Error occurred while calling CreateHTML", err)
+			}
+
+			switch update.Message.Text {
+
+			case "Показать статьи":
+				msg.Text = showArticles()
+				if _, err = bot.Send(msg); err != nil {
+					mydb.UppendErrorWithPath(err)
+					logrus.Info("Error occurred while sending message", err)
+				}
+
+			case msg.Text:
+				if msg.Text == post.Title {
+					file, err := mydb.CreateHTML(update.Message.Text, update.Message.From.UserName)
+					if err != nil {
+						mydb.UppendErrorWithPath(err)
+						logrus.Info("Error occurred while calling CreateHTML", err)
+					}
+					doc := tgbotapi.NewDocumentUpload(update.Message.Chat.ID, file)
+					if _, err = bot.Send(doc); err != nil {
+						mydb.UppendErrorWithPath(err)
+						logrus.Info("Error occurred while sending document", err)
+					}
+				}
 			}
 		}
-
 	}
-	//mydb.CreateHTML()
 }
