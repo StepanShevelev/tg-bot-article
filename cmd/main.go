@@ -38,7 +38,7 @@ func main() {
 
 	mydb.ConnectToDb()
 
-	bot, err := tgbotapi.NewBotAPI("5085408878:AAHGoqzpIcnAZlWnN6alOB_c5DXxDd79dO4")
+	bot, err := tgbotapi.NewBotAPI(" ")
 	if err != nil {
 		logrus.Info(err)
 	}
