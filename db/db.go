@@ -107,7 +107,7 @@ func CreateHTML(title string, whoTookMe string) (string, error) {
 </head>
 <body>
 
-<img src={{  (index  .Images 0).Name }} >
+<img src={{  printf "%s" ((index  .Images 0).Name) }} >
 
 
 {{.Text}}
@@ -133,11 +133,13 @@ func CreateHTML(title string, whoTookMe string) (string, error) {
 		if i == 0 {
 			continue
 		}
-		tmpl = tmpl + "<html> <img src={{  (index $.Images" + " " + strconv.Itoa(i) + ").Name }} > </html>"
+		tmpl = tmpl + "<html> <img src= {{ btoa (index $.Images" + " " + strconv.Itoa(i) + ").Name }} > </html>"
 	}
 
 	// Make and parse the HTML template
-	t, err := template.New(post.Title).Parse(tmpl)
+	t, err := template.New(post.Title).Funcs(template.FuncMap{
+		"btoa": func(b []byte) string { return string(b) },
+	}).Parse(tmpl)
 	if err != nil {
 		logrus.Info("Error occurred while creating new template", err)
 		UppendErrorWithPath(err)
