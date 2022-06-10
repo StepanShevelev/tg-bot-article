@@ -25,6 +25,7 @@ func ConnectToDb() {
 	}
 
 	db.AutoMigrate(&Post{})
+	db.AutoMigrate(&User{})
 	db.AutoMigrate(&Image{})
 	db.AutoMigrate(&ErrLogs{})
 
@@ -62,6 +63,19 @@ func GetPostByTitle(title string) (*Post, error) {
 		return nil, result.Error
 	}
 	return post, nil
+}
+
+func CreateUser(tgName string, position string) {
+
+	user := User{Name: tgName, Position: position}
+
+	result := Database.Db.Create(&user)
+	if result.Error != nil {
+		UppendErrorWithPath(result.Error)
+		logrus.Info("Could not create user", result.Error)
+
+	}
+
 }
 
 func GetImagesByPost(postId uint) ([]Image, error) {
@@ -159,13 +173,6 @@ func CreateHTML(title string, whoTookMe string) (string, error) {
 		UppendErrorWithPath(err)
 		return "", err
 	}
-
-	//err = t.ExecuteTemplate(file, post.Title, images)
-	//if err != nil {
-	//	logrus.Info("Error occurred while updating file data", err)
-	//	UppendErrorWithPath(err)
-	//	return "", err
-	//}
 
 	post.WhoTookMe = whoTookMe
 	result := Database.Db.Save(&post)

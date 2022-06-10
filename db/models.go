@@ -27,3 +27,9 @@ type ErrLogs struct {
 	Place string `json:"place" db:"place"`
 	Count int    `json:"count" db:"count"`
 }
+
+type User struct {
+	gorm.Model
+	Name     string `json:"name" db:"name"`
+	Position string `json:"position" db:"position"`
+}

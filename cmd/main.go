@@ -21,7 +21,7 @@ func showArticles() string {
 		return ""
 	}
 	msg := "Доступные статьи:"
-	for i, _ := range postMap {
+	for i := range postMap {
 		msg = msg + "\n"
 		msg += postMap[i] + "\n"
 	}
@@ -38,6 +38,8 @@ func main() {
 		logrus.Info(err)
 	}
 
+	var user mydb.User
+
 	bot.Debug = true
 	_, err = bot.RemoveWebhook()
 	if err != nil {
@@ -51,16 +53,7 @@ func main() {
 
 	updates, _ := bot.GetUpdatesChan(u)
 
-	type User struct {
-		user          *tgbotapi.User
-		buttonPressed bool
-	}
-
-	var botUser User
-
 	for update := range updates {
-
-		//action := tgbotapi.NewChatAction(update.Message.Chat.ID, showArticles())
 
 		logrus.WithFields(logrus.Fields{
 			"UserName": update.Message.From.UserName,
@@ -69,61 +62,82 @@ func main() {
 
 		if update.Message != nil {
 
-			if update.Message.IsCommand() {
-				switch update.Message.Command() {
-				case "start":
-					msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
-					msg.ReplyMarkup = numericKeyboard
-					if _, err = bot.Send(msg); err != nil {
-						mydb.UppendErrorWithPath(err)
-						logrus.Info("Error occurred while sending message", err)
-					}
-				}
+			result := mydb.Database.Db.First(&user, "name = ?", update.Message.From.UserName)
+			if result.Error != nil {
+
+				logrus.Info("Error occurred while searching user")
+				mydb.UppendErrorWithPath(result.Error)
+				mydb.CreateUser(update.Message.From.UserName, "before button")
 			}
+		}
 
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
-
-			switch update.Message.Text {
-
-			case "Показать статьи":
-				msg.Text = showArticles()
-
-				botUser.buttonPressed = true
-
+		if update.Message.IsCommand() {
+			switch update.Message.Command() {
+			case "start":
+				msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
+				msg.ReplyMarkup = numericKeyboard
 				if _, err = bot.Send(msg); err != nil {
 					mydb.UppendErrorWithPath(err)
 					logrus.Info("Error occurred while sending message", err)
 				}
+			}
+		}
 
-			case msg.Text:
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
 
-				if botUser.buttonPressed == true {
-					post, err := mydb.GetPostByTitle(msg.Text)
+		switch update.Message.Text {
+
+		case "Показать статьи":
+			msg.Text = showArticles()
+
+			user.Position = "after button"
+			result := mydb.Database.Db.Save(&user)
+			if result.Error != nil {
+				logrus.Info("Error occurred while updating user position")
+				mydb.UppendErrorWithPath(result.Error)
+				return
+			}
+
+			if _, err = bot.Send(msg); err != nil {
+				mydb.UppendErrorWithPath(err)
+				logrus.Info("Error occurred while sending message", err)
+			}
+
+		case msg.Text:
+
+			if user.Position == "after button" {
+				post, err := mydb.GetPostByTitle(msg.Text)
+				if err != nil {
+					mydb.UppendErrorWithPath(err)
+					logrus.Info("Error occurred while calling CreateHTML", err)
+				}
+
+				if msg.Text == post.Title {
+					file, err := mydb.CreateHTML(update.Message.Text, update.Message.From.UserName)
 					if err != nil {
 						mydb.UppendErrorWithPath(err)
 						logrus.Info("Error occurred while calling CreateHTML", err)
 					}
 
-					if msg.Text == post.Title {
-						file, err := mydb.CreateHTML(update.Message.Text, update.Message.From.UserName)
-						if err != nil {
-							mydb.UppendErrorWithPath(err)
-							logrus.Info("Error occurred while calling CreateHTML", err)
-						}
-
-						doc := tgbotapi.NewDocumentUpload(update.Message.Chat.ID, file)
-						if _, err = bot.Send(doc); err != nil {
-							mydb.UppendErrorWithPath(err)
-							logrus.Info("Error occurred while sending document", err)
-						}
-						botUser.buttonPressed = false
-					}
-				} else {
-					msg.Text = update.Message.Text
-					if _, err = bot.Send(msg); err != nil {
+					doc := tgbotapi.NewDocumentUpload(update.Message.Chat.ID, file)
+					if _, err = bot.Send(doc); err != nil {
 						mydb.UppendErrorWithPath(err)
 						logrus.Info("Error occurred while sending document", err)
 					}
+					user.Name = update.Message.From.UserName
+					user.Position = "before button"
+					result := mydb.Database.Db.Save(&user)
+					if result.Error != nil {
+						logrus.Info("Error occurred while updating user position")
+						mydb.UppendErrorWithPath(result.Error)
+						return
+					}
+				}
+			} else {
+				msg.Text = update.Message.Text
+				if _, err = bot.Send(msg); err != nil {
+					mydb.UppendErrorWithPath(err)
+					logrus.Info("Error occurred while sending text", err)
 				}
 			}
 		}
