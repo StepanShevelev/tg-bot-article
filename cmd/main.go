@@ -6,11 +6,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-//var numericKeyboard = tgbotapi.NewInlineKeyboardMarkup(
-//	tgbotapi.NewInlineKeyboardRow(
-//		tgbotapi.NewInlineKeyboardButtonData("Показать статьи", showArticles()),
-//	))
-
 var numericKeyboard = tgbotapi.NewReplyKeyboard(
 	tgbotapi.NewKeyboardButtonRow(
 		tgbotapi.NewKeyboardButton("Показать статьи"),
@@ -38,7 +33,7 @@ func main() {
 
 	mydb.ConnectToDb()
 
-	bot, err := tgbotapi.NewBotAPI("5085408878:AAHGoqzpIcnAZlWnN6alOB_c5DXxDd79dO4")
+	bot, err := tgbotapi.NewBotAPI(" ")
 	if err != nil {
 		logrus.Info(err)
 	}
@@ -56,7 +51,16 @@ func main() {
 
 	updates, _ := bot.GetUpdatesChan(u)
 
+	type User struct {
+		user          *tgbotapi.User
+		buttonPressed bool
+	}
+
+	var botUser User
+
 	for update := range updates {
+
+		//action := tgbotapi.NewChatAction(update.Message.Chat.ID, showArticles())
 
 		logrus.WithFields(logrus.Fields{
 			"UserName": update.Message.From.UserName,
@@ -78,30 +82,45 @@ func main() {
 			}
 
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
-			post, err := mydb.GetPostByTitle(msg.Text)
-			if err != nil {
-				mydb.UppendErrorWithPath(err)
-				logrus.Info("Error occurred while calling CreateHTML", err)
-			}
 
 			switch update.Message.Text {
 
 			case "Показать статьи":
 				msg.Text = showArticles()
+
+				botUser.buttonPressed = true
+
 				if _, err = bot.Send(msg); err != nil {
 					mydb.UppendErrorWithPath(err)
 					logrus.Info("Error occurred while sending message", err)
 				}
 
 			case msg.Text:
-				if msg.Text == post.Title {
-					file, err := mydb.CreateHTML(update.Message.Text, update.Message.From.UserName)
+
+				if botUser.buttonPressed == true {
+					post, err := mydb.GetPostByTitle(msg.Text)
 					if err != nil {
 						mydb.UppendErrorWithPath(err)
 						logrus.Info("Error occurred while calling CreateHTML", err)
 					}
-					doc := tgbotapi.NewDocumentUpload(update.Message.Chat.ID, file)
-					if _, err = bot.Send(doc); err != nil {
+
+					if msg.Text == post.Title {
+						file, err := mydb.CreateHTML(update.Message.Text, update.Message.From.UserName)
+						if err != nil {
+							mydb.UppendErrorWithPath(err)
+							logrus.Info("Error occurred while calling CreateHTML", err)
+						}
+
+						doc := tgbotapi.NewDocumentUpload(update.Message.Chat.ID, file)
+						if _, err = bot.Send(doc); err != nil {
+							mydb.UppendErrorWithPath(err)
+							logrus.Info("Error occurred while sending document", err)
+						}
+						botUser.buttonPressed = false
+					}
+				} else {
+					msg.Text = update.Message.Text
+					if _, err = bot.Send(msg); err != nil {
 						mydb.UppendErrorWithPath(err)
 						logrus.Info("Error occurred while sending document", err)
 					}
