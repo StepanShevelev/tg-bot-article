@@ -57,6 +57,13 @@ func main() {
 
 	for update := range updates {
 
+		//result := tgbotapi.NewInlineQueryResultPhoto("id", "google.com")
+		//
+		//if result.Type != "photo" ||
+		//	result.ID != "id" ||
+		//	result.URL != "google.com" {
+		//}
+
 		logrus.WithFields(logrus.Fields{
 			"UserName": update.Message.From.UserName,
 			"Text":     update.Message.Text,
@@ -94,6 +101,7 @@ func main() {
 
 			user.Position = "after button show"
 			result := mydb.Database.Db.Save(&user)
+			logrus.Info(user.Position)
 			if result.Error != nil {
 				logrus.Info("Error occurred while updating user position")
 				mydb.UppendErrorWithPath(result.Error)
@@ -157,7 +165,7 @@ func main() {
 			if user.Position == "after button create" {
 				var post mydb.Post
 				post.Title = update.Message.Text
-				post.WhoTookMe = update.Message.From.UserName
+				post.WhoCreatedMe = update.Message.From.UserName
 				logrus.Info(post.Title)
 				result := mydb.Database.Db.Create(&post)
 				if result.Error != nil {
@@ -182,12 +190,20 @@ func main() {
 			}
 			if user.Position == "after title create" {
 				var post mydb.Post
-				post.Title = update.Message.Text
 				logrus.Info(post.Title)
-				result := mydb.Database.Db.Select("Title").Create(&post)
+				result := mydb.Database.Db.Find(&post, "who_created_me = ?", update.Message.From.UserName)
 				if result.Error != nil {
-					logrus.Info("Error occurred while creating a post")
+					logrus.Info("Error occurred while searching post")
 					mydb.UppendErrorWithPath(result.Error)
+					return
+				}
+				post.Text = update.Message.Text
+
+				result = mydb.Database.Db.Save(&post)
+				if result.Error != nil {
+					logrus.Info("Error occurred while updating post text")
+					mydb.UppendErrorWithPath(result.Error)
+					return
 				}
 
 				user.Position = "after text create"
