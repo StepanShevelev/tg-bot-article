@@ -4,6 +4,7 @@ import (
 	mydb "github.com/StepanShevelev/tg-bot-article/db"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 	"github.com/sirupsen/logrus"
+	"strings"
 )
 
 var numericKeyboard = tgbotapi.NewReplyKeyboard(
@@ -30,17 +31,49 @@ func showArticles() string {
 	return msg
 }
 
+func CreatePost(update tgbotapi.Update, bot *tgbotapi.BotAPI, user mydb.User) uint {
+	var post mydb.Post
+
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
+	post.Title = msg.Text
+	post.WhoCreatedMe = update.Message.From.UserName
+	logrus.Info(post.Title)
+	result := mydb.Database.Db.Create(&post)
+
+	//Id = post.ID
+	logrus.Info(post.ID)
+
+	if result.Error != nil {
+		logrus.Info("Error occurred while creating a post")
+		mydb.UppendErrorWithPath(result.Error)
+	}
+
+	msg.Text = "вставьте сссылку на главную картинку"
+	if _, err := bot.Send(msg); err != nil {
+		mydb.UppendErrorWithPath(err)
+		logrus.Info("Error occurred while sending text", err)
+	}
+
+	user.Position = "after title create"
+	result = mydb.Database.Db.Save(&user)
+	if result.Error != nil {
+		logrus.Info("Error occurred while updating user position")
+		mydb.UppendErrorWithPath(result.Error)
+
+	}
+
+	return post.ID
+}
 func main() {
 
 	mydb.ConnectToDb()
-
-	bot, err := tgbotapi.NewBotAPI(" ")
+	var user mydb.User
+	var post mydb.Post
+	var Id uint
+	bot, err := tgbotapi.NewBotAPI("5085408878:AAFqKpUlFkI-czYYNTvU59gSpeb-Wyl0V_s")
 	if err != nil {
 		logrus.Info(err)
 	}
-
-	var user mydb.User
-	//var post mydb.Post
 
 	bot.Debug = true
 	_, err = bot.RemoveWebhook()
@@ -56,13 +89,6 @@ func main() {
 	updates, _ := bot.GetUpdatesChan(u)
 
 	for update := range updates {
-
-		//result := tgbotapi.NewInlineQueryResultPhoto("id", "google.com")
-		//
-		//if result.Type != "photo" ||
-		//	result.ID != "id" ||
-		//	result.URL != "google.com" {
-		//}
 
 		logrus.WithFields(logrus.Fields{
 			"UserName": update.Message.From.UserName,
@@ -93,7 +119,7 @@ func main() {
 		}
 
 		msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
-		//pic := tgbotapi.NewPhotoUpload()
+
 		switch update.Message.Text {
 
 		case "Показать статьи":
@@ -114,12 +140,13 @@ func main() {
 			}
 
 		case "Создать статью":
-			msg.Text = "Введи название статьи"
 
+			msg.Text = "введите название статьи"
 			if _, err = bot.Send(msg); err != nil {
 				mydb.UppendErrorWithPath(err)
 				logrus.Info("Error occurred while sending text", err)
 			}
+
 			user.Position = "after button create"
 			result := mydb.Database.Db.Save(&user)
 			if result.Error != nil {
@@ -127,12 +154,136 @@ func main() {
 				mydb.UppendErrorWithPath(result.Error)
 				return
 			}
-			//
-			//if _, err = bot.Send(msg); err != nil {
-			//	mydb.UppendErrorWithPath(err)
-			//	logrus.Info("Error occurred while sending message", err)
-			//}
+
 		case msg.Text:
+
+			if user.Position == "after button create" {
+				Id = CreatePost(update, bot, user)
+				continue
+
+			}
+
+			if user.Position == "after title create" {
+
+				msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
+
+				result := mydb.Database.Db.Find(&post, "id = ?", Id)
+				logrus.Info(Id)
+				if result.Error != nil {
+					logrus.Info("Error occurred while searching post")
+					mydb.UppendErrorWithPath(result.Error)
+					return
+				}
+
+				image := mydb.Image{
+					Name:   []byte(msg.Text),
+					PostID: Id,
+				}
+
+				result = mydb.Database.Db.Create(&image)
+				if result.Error != nil {
+					logrus.Info("Error occurred while updating post text")
+					mydb.UppendErrorWithPath(result.Error)
+					return
+				}
+
+				msg.Text = "введите текст статьи"
+				if _, err = bot.Send(msg); err != nil {
+					mydb.UppendErrorWithPath(err)
+					logrus.Info("Error occurred while sending text", err)
+				}
+
+				user.Position = "after picture create"
+				result = mydb.Database.Db.Save(&user)
+				if result.Error != nil {
+					logrus.Info("Error occurred while updating user position")
+					mydb.UppendErrorWithPath(result.Error)
+					return
+
+				}
+				continue
+			}
+
+			if user.Position == "after picture create" {
+
+				result := mydb.Database.Db.Find(&post, "id = ?", Id)
+				logrus.Info(Id)
+				if result.Error != nil {
+					logrus.Info("Error occurred while searching post")
+					mydb.UppendErrorWithPath(result.Error)
+					return
+				}
+				msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
+
+				result = mydb.Database.Db.Model(&post).Where("id = ?", Id).Update("Text", msg.Text)
+				if result.Error != nil {
+					logrus.Info("Error occurred while updating post text")
+					mydb.UppendErrorWithPath(result.Error)
+					return
+				}
+				msg.Text = "Вставьте все ссылки на картинки одним сообщением"
+				if _, err = bot.Send(msg); err != nil {
+					mydb.UppendErrorWithPath(err)
+					logrus.Info("Error occurred while sending text", err)
+				}
+
+				user.Position = "after text create"
+				result = mydb.Database.Db.Save(&user)
+				if result.Error != nil {
+					logrus.Info("Error occurred while updating user position")
+					mydb.UppendErrorWithPath(result.Error)
+					return
+				}
+				continue
+			}
+
+			if user.Position == "after text create" {
+
+				msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
+
+				result := mydb.Database.Db.Find(&post, "id = ?", Id)
+				if result.Error != nil {
+					logrus.Info("Error occurred while searching post")
+					mydb.UppendErrorWithPath(result.Error)
+					return
+				}
+
+				var imgMass []string
+				var imgB [][]byte
+
+				imgMass = strings.Split(update.Message.Text, "\n")
+
+				for _, img := range imgMass {
+					imgB = append(imgB, []byte(img))
+				}
+
+				for _, img := range imgB {
+					var images = []mydb.Image{{Name: img, PostID: Id}}
+					result := mydb.Database.Db.Create(&images)
+					if result.Error != nil {
+						logrus.Info("Error occurred while creating an image")
+						mydb.UppendErrorWithPath(result.Error)
+						return
+					}
+				}
+
+				msg.Text = "вы создали статью"
+				if _, err = bot.Send(msg); err != nil {
+					mydb.UppendErrorWithPath(err)
+					logrus.Info("Error occurred while sending text", err)
+				}
+
+				user.Position = "before button"
+				result = mydb.Database.Db.Save(&user)
+				if result.Error != nil {
+					logrus.Info("Error occurred while updating user position")
+					mydb.UppendErrorWithPath(result.Error)
+					return
+
+				}
+				continue
+			}
+
 			if user.Position == "after button show" {
 				post, err := mydb.GetPostByTitle(msg.Text)
 				if err != nil {
@@ -160,68 +311,18 @@ func main() {
 						mydb.UppendErrorWithPath(result.Error)
 						return
 					}
+					continue
 				}
-			}
-			if user.Position == "after button create" {
-				var post mydb.Post
-				post.Title = update.Message.Text
-				post.WhoCreatedMe = update.Message.From.UserName
-				logrus.Info(post.Title)
-				result := mydb.Database.Db.Create(&post)
-				if result.Error != nil {
-					logrus.Info("Error occurred while creating a post")
-					mydb.UppendErrorWithPath(result.Error)
-				}
-
-				user.Position = "after title create"
-				result = mydb.Database.Db.Save(&user)
-				if result.Error != nil {
-					logrus.Info("Error occurred while updating user position")
-					mydb.UppendErrorWithPath(result.Error)
-					return
-				}
-
-				msg.Text = "Введи текст статьи"
-
-				if _, err = bot.Send(msg); err != nil {
-					mydb.UppendErrorWithPath(err)
-					logrus.Info("Error occurred while sending text", err)
-				}
-			}
-			if user.Position == "after title create" {
-				var post mydb.Post
-				logrus.Info(post.Title)
-				result := mydb.Database.Db.Find(&post, "who_created_me = ?", update.Message.From.UserName)
-				if result.Error != nil {
-					logrus.Info("Error occurred while searching post")
-					mydb.UppendErrorWithPath(result.Error)
-					return
-				}
-				post.Text = update.Message.Text
-
-				result = mydb.Database.Db.Save(&post)
-				if result.Error != nil {
-					logrus.Info("Error occurred while updating post text")
-					mydb.UppendErrorWithPath(result.Error)
-					return
-				}
-
-				user.Position = "after text create"
-				result = mydb.Database.Db.Save(&user)
-				if result.Error != nil {
-					logrus.Info("Error occurred while updating user position")
-					mydb.UppendErrorWithPath(result.Error)
-					return
-				}
-			}
-			if user.Position == "before button" {
-				msg.Text = update.Message.Text
-				if _, err = bot.Send(msg); err != nil {
-					mydb.UppendErrorWithPath(err)
-					logrus.Info("Error occurred while sending text", err)
-				}
-
 			}
 		}
+
+		//if user.Position == "before button" {
+		//	msg.Text = update.Message.Text
+		//	if _, err = bot.Send(msg); err != nil {
+		//		mydb.UppendErrorWithPath(err)
+		//		logrus.Info("Error occurred while sending text", err)
+		//	}
+		//
+		//}
 	}
 }

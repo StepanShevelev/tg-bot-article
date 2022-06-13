@@ -108,20 +108,23 @@ func CreateHTML(title string, whoTookMe string) (string, error) {
 		return "", err
 	}
 
-	//  {{range .Images}}
-	//               <img src={{ .Name}}>
-	//           {{end}}
-
-	//An HTML template
 	var tmpl = `
 	<html>
 <head>
-<title>{{.Title}}</title>
+<title>
 
+<h1 class={{$.Title}}></h1>
+
+</title>
 </head>
 <body>
 
-<img src={{  printf "%s" ((index  .Images 0).Name) }} >
+
+
+<div>{{$.Title}}</div>
+
+
+<div><img src={{  printf "%s" ((index  .Images 0).Name )  }} style="width: 500px;height: 400px" ></div>
 
 
 {{.Text}}
@@ -147,7 +150,7 @@ func CreateHTML(title string, whoTookMe string) (string, error) {
 		if i == 0 {
 			continue
 		}
-		tmpl = tmpl + "<html> <img src= {{ btoa (index $.Images" + " " + strconv.Itoa(i) + ").Name }} > </html>"
+		tmpl = tmpl + "<img src= {{ btoa (index $.Images" + " " + strconv.Itoa(i) + ").Name }} style=\"width: 500px;height: 400px\" >"
 	}
 
 	// Make and parse the HTML template
