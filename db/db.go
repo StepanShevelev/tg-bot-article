@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type DbInstance struct {
@@ -183,7 +184,8 @@ func CreateHTML(title string, whoTookMe string) (string, error) {
 		logrus.Info("Error occurred while updating post", err)
 		UppendErrorWithPath(result.Error)
 	}
-
-	path := "./" + post.Title + ".html"
+	replacer := strings.NewReplacer(" ", "", "/", "", ".", "", ",", "", "!", "", ":", "", "?", "")
+	txt := replacer.Replace(post.Title)
+	path := "./" + txt + ".html"
 	return path, nil
 }

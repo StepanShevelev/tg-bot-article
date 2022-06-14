@@ -13,6 +13,7 @@ type Post struct {
 	ArticleUrl   string  `json:"article_url" db:"article_url"`
 	WhoTookMe    string  `json:"who_took_me" db:"who_took_me"`
 	WhoCreatedMe string  `json:"who_created_me" db:"who_created_me"`
+	Name         string  `json:"name" db:"name"`
 }
 
 type Image struct {

@@ -4,6 +4,7 @@ import (
 	mydb "github.com/StepanShevelev/tg-bot-article/db"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 	"github.com/sirupsen/logrus"
+	"net/url"
 	"strings"
 )
 
@@ -36,9 +37,11 @@ func CreatePost(update tgbotapi.Update, bot *tgbotapi.BotAPI, user mydb.User) ui
 
 	msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
 	post.Title = msg.Text
+	replacer := strings.NewReplacer(" ", "", "/", "", ".", "", ",", "", "!", "", ":", "", "?", "")
+	post.Name = replacer.Replace(msg.Text)
 	post.WhoCreatedMe = update.Message.From.UserName
 	logrus.Info(post.Title)
-	result := mydb.Database.Db.Create(&post)
+	result := mydb.Database.Db.Select("Title", "Name", "WhoCreatedMe").Create(&post)
 
 	//Id = post.ID
 	logrus.Info(post.ID)
@@ -48,7 +51,7 @@ func CreatePost(update tgbotapi.Update, bot *tgbotapi.BotAPI, user mydb.User) ui
 		mydb.UppendErrorWithPath(result.Error)
 	}
 
-	msg.Text = "вставьте сссылку на главную картинку"
+	msg.Text = "вставьте сссылку на главную картинку в формате https://images.pexels.com/your-picture.jpeg"
 	if _, err := bot.Send(msg); err != nil {
 		mydb.UppendErrorWithPath(err)
 		logrus.Info("Error occurred while sending text", err)
@@ -64,12 +67,21 @@ func CreatePost(update tgbotapi.Update, bot *tgbotapi.BotAPI, user mydb.User) ui
 
 	return post.ID
 }
+
 func main() {
 
+	//config := cfg.New()
+	//if err := config.Load("./configs", "config", "yml"); err != nil {
+	//	logrus.Info(err)
+	//}
+
 	mydb.ConnectToDb()
+	logrus.Info("Connected to db")
+
 	var user mydb.User
 	var post mydb.Post
 	var Id uint
+
 	bot, err := tgbotapi.NewBotAPI(" ")
 	if err != nil {
 		logrus.Info(err)
@@ -175,6 +187,18 @@ func main() {
 					return
 				}
 
+				_, err := url.ParseRequestURI(msg.Text)
+				if err != nil {
+					logrus.Info("Not picture URL")
+					mydb.UppendErrorWithPath(err)
+					msg.Text = "Проверь правильность ссылки"
+					if _, err = bot.Send(msg); err != nil {
+						mydb.UppendErrorWithPath(err)
+						logrus.Info("Error occurred while sending text", err)
+					}
+					continue
+				}
+
 				image := mydb.Image{
 					Name:   []byte(msg.Text),
 					PostID: Id,
@@ -206,16 +230,19 @@ func main() {
 
 			if user.Position == "after picture create" {
 
-				result := mydb.Database.Db.Find(&post, "id = ?", Id)
-				logrus.Info(Id)
-				if result.Error != nil {
-					logrus.Info("Error occurred while searching post")
-					mydb.UppendErrorWithPath(result.Error)
-					return
-				}
+				//result := mydb.Database.Db.Find(&post, "id = ?", Id)
+				//logrus.Info(Id)
+				//if result.Error != nil {
+				//	logrus.Info("Error occurred while searching post")
+				//	mydb.UppendErrorWithPath(result.Error)
+				//	return
+				//}
 				msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
-
-				result = mydb.Database.Db.Model(&post).Where("id = ?", Id).Update("Text", msg.Text)
+				//mydb.Database.Db.Model(&post).Where("id = ?", Id).UpdateColumn("text", msg.Text)
+				//mydb.Database.Db.Model(&post).Update("text", msg.Text)
+				result := mydb.Database.Db.Model(&post).Where("id = ?", Id).Update("Text", msg.Text)
+				logrus.Info(post.Text)
+				logrus.Info(Id)
 				if result.Error != nil {
 					logrus.Info("Error occurred while updating post text")
 					mydb.UppendErrorWithPath(result.Error)
@@ -325,4 +352,7 @@ func main() {
 		//
 		//}
 	}
+
+	//telegram.BotServe()
+
 }
